@@ -1,0 +1,256 @@
+{
+  "name": "AI Receptionist Automation - Full Workflow",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "vapi-call-start",
+        "responseMode": "onReceived",
+        "responseData": "={{ $json }}"
+      },
+      "id": "vapi-webhook",
+      "name": "VAPI Webhook (Call Start)",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1.1,
+      "position": [250, 300],
+      "webhookId": "vapi-call-start"
+    },
+    {
+      "parameters": {
+        "operation": "switch",
+        "conditions": {
+          "number": [
+            {
+              "value1": "={{ $json.intent }}",
+              "operation": "equal",
+              "value2": "appointment"
+            },
+            {
+              "value1": "={{ $json.intent }}",
+              "operation": "equal",
+              "value2": "faq"
+            },
+            {
+              "value1": "={{ $json.intent }}",
+              "operation": "equal",
+              "value2": "lead"
+            }
+          ]
+        }
+      },
+      "id": "intent-router",
+      "name": "Intent Router",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 1,
+      "position": [450, 300]
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "url": "={{ $node[\"VAPI Webhook\"].json.calendar_api_url }}",
+        "jsonParameters": true,
+        "options": {}
+      },
+      "id": "google-calendar-check",
+      "name": "Check Calendar Availability",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [650, 150]
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "url": "={{ $node[\"Google Calendar Check\"].json.booking_url }}",
+        "jsonParameters": true,
+        "options": {}
+      },
+      "id": "google-calendar-book",
+      "name": "Book Appointment",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [850, 150]
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "url": "https://api.airtable.com/v0/={{ $json.baseId }}/={{ $json.tableId }}",
+        "jsonParameters": true,
+        "authentication": "headerAuth",
+        "options": {}
+      },
+      "id": "airtable-save-lead",
+      "name": "Save Lead to Airtable",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [650, 450]
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "url": "https://api.twilio.com/2010-04-01/Accounts/={{ $json.accountSid }}/Messages.json",
+        "jsonParameters": false,
+        "options": {}
+      },
+      "id": "twilio-sms",
+      "name": "Send SMS Confirmation",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [650, 750]
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "url": "={{ $node[\"Slack Webhook\"].json.url }}",
+        "jsonParameters": true,
+        "options": {}
+      },
+      "id": "slack-alert",
+      "name": "Send Slack Alert",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [850, 750]
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "url": "https://api.sendgrid.com/v3/mail/send",
+        "jsonParameters": true,
+        "authentication": "headerAuth",
+        "options": {}
+      },
+      "id": "sendgrid-email",
+      "name": "Send Confirmation Email",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [650, 850]
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "url": "https://api.mixpanel.com/track",
+        "jsonParameters": true,
+        "options": {}
+      },
+      "id": "mixpanel-analytics",
+      "name": "Track Call Analytics",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [1050, 600]
+    },
+    {
+      "parameters": {
+        "functionCode": "return {\n  call_id: $json.call_id,\n  intent: $json.intent,\n  duration: $json.duration || 0,\n  outcome: $json.outcome || 'completed',\n  timestamp: new Date().toISOString()\n};"
+      },
+      "id": "format-analytics",
+      "name": "Format Analytics Data",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [850, 600]
+    }
+  ],
+  "connections": {
+    "VAPI Webhook (Call Start)": {
+      "main": [
+        [
+          {
+            "node": "Intent Router",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Intent Router": {
+      "main": [
+        [
+          {
+            "node": "Check Calendar Availability",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Save Lead to Airtable",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        []
+      ]
+    },
+    "Check Calendar Availability": {
+      "main": [
+        [
+          {
+            "node": "Book Appointment",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Book Appointment": {
+      "main": [
+        [
+          {
+            "node": "Send SMS Confirmation",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Save Lead to Airtable": {
+      "main": [
+        [
+          {
+            "node": "Send Slack Alert",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send SMS Confirmation": {
+      "main": [
+        [
+          {
+            "node": "Send Confirmation Email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Confirmation Email": {
+      "main": [
+        [
+          {
+            "node": "Track Call Analytics",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Slack Alert": {
+      "main": [
+        [
+          {
+            "node": "Track Call Analytics",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {},
+  "versionId": "1.0.0",
+  "meta": {
+    "templateCredsSetupCompleted": true
+  },
+  "id": "ai-receptionist-workflow"
+}
